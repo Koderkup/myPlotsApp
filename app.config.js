@@ -46,6 +46,9 @@ module.exports = {
       firebaseMessagingSenderId: process.env.FIREBASE_MESSAGING_SENDER_ID,
       firebaseAppId: process.env.FIREBASE_APP_ID,
       googleClientId: process.env.GOOGLE_CLIENT_ID,
+      eas: {
+        projectId: '01af1be0-e304-4c09-bf73-ac9b8d782b92',
+      },
     },
   },
 };
