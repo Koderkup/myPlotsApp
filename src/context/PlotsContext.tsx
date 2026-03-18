@@ -1,12 +1,12 @@
-
 import React, {
   createContext,
   useState,
   useContext,
   ReactNode,
-  useCallback,
   useEffect,
+  useCallback,
 } from 'react';
+
 import {
   Plot,
   PlotParams,
@@ -15,16 +15,18 @@ import {
   Floor,
   Apartment,
 } from '../types';
+
 import { db } from '../services/firebase';
 import {
   collection,
   doc,
-  getDocs,
   addDoc,
   updateDoc,
   onSnapshot,
   deleteDoc,
 } from 'firebase/firestore';
+
+import { useAuth } from './AuthContext';
 
 const PlotsContext = createContext<PlotsContextType | undefined>(undefined);
 
@@ -41,39 +43,42 @@ interface PlotsProviderProps {
 }
 
 export const PlotsProvider = ({ children }: PlotsProviderProps) => {
+  const { user, loading: authLoading } = useAuth();
+
   const [plots, setPlots] = useState<Plot[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
 
+  // -----------------------------
+  // 🔥 Главный фикс: слушатель запускается ТОЛЬКО после загрузки user
+  // -----------------------------
   useEffect(() => {
-    const loadPlots = async () => {
-      try {
-        const querySnapshot = await getDocs(collection(db, 'plots'));
-        const loadedPlots: Plot[] = [];
-        querySnapshot.forEach((doc) => {
-          loadedPlots.push({ id: doc.id, ...doc.data() } as Plot);
-        });
-        setPlots(loadedPlots);
-      } catch (error) {
-        console.error('Error loading plots:', error);
-      } finally {
-        setLoading(false);
-      }
-    };
+    if (authLoading) return; // ждём пока загрузится Auth
+    if (!user) {
+      setPlots([]);
+      setLoading(false);
+      return;
+    }
 
-    loadPlots();
+    setLoading(true);
 
-    const unsubscribe = onSnapshot(collection(db, 'plots'), (snapshot) => {
-      const updatedPlots: Plot[] = [];
-      snapshot.forEach((doc) => {
-        updatedPlots.push({ id: doc.id, ...doc.data() } as Plot);
-      });
-      setPlots(updatedPlots);
+    const ref = collection(db, 'plots');
+
+    const unsubscribe = onSnapshot(ref, (snapshot) => {
+      const updated: Plot[] = snapshot.docs.map((doc) => ({
+        id: doc.id,
+        ...doc.data(),
+      })) as Plot[];
+
+      setPlots(updated);
       setLoading(false);
     });
 
     return () => unsubscribe();
-  }, []);
+  }, [user, authLoading]);
 
+  // -----------------------------
+  // Генерация подъездов/этажей
+  // -----------------------------
   const generateEntrancesWithParams = (params: PlotParams): Entrance[] => {
     const {
       entrances: entranceCount,
@@ -82,6 +87,7 @@ export const PlotsProvider = ({ children }: PlotsProviderProps) => {
       startNumber,
       numberingScheme,
     } = params;
+
     const entrances: Entrance[] = [];
 
     for (let e = 1; e <= entranceCount; e++) {
@@ -128,6 +134,9 @@ export const PlotsProvider = ({ children }: PlotsProviderProps) => {
     return entrances;
   };
 
+  // -----------------------------
+  // Добавление участка
+  // -----------------------------
   const addPlot = useCallback(async (params: PlotParams) => {
     try {
       const newPlot: Omit<Plot, 'id'> = {
@@ -142,6 +151,9 @@ export const PlotsProvider = ({ children }: PlotsProviderProps) => {
     }
   }, []);
 
+  // -----------------------------
+  // Обновление участка
+  // -----------------------------
   const updatePlot = useCallback(async (plotId: string, updatedPlot: Plot) => {
     try {
       const plotRef = doc(db, 'plots', plotId);
@@ -151,6 +163,9 @@ export const PlotsProvider = ({ children }: PlotsProviderProps) => {
     }
   }, []);
 
+  // -----------------------------
+  // Удаление участка
+  // -----------------------------
   const deletePlot = useCallback(async (plotId: string) => {
     try {
       const plotRef = doc(db, 'plots', plotId);
@@ -161,9 +176,10 @@ export const PlotsProvider = ({ children }: PlotsProviderProps) => {
     }
   }, []);
 
-
   return (
-    <PlotsContext.Provider value={{ plots, addPlot, updatePlot, loading, deletePlot }}>
+    <PlotsContext.Provider
+      value={{ plots, addPlot, updatePlot, loading, deletePlot }}
+    >
       {children}
     </PlotsContext.Provider>
   );
